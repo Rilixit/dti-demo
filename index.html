@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f0f12">
+<title>Grub</title>
+<style>
+  :root {
+    --bg: #0f0f12;
+    --card: #1a1a20;
+    --text: #f5f5f7;
+    --muted: #8a8a95;
+    --yes: #34c759;
+    --no: #ff3b30;
+    --accent: #ff6b5b;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0;
+    height: 100dvh;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    overscroll-behavior: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  header { padding: 14px 20px 6px; }
+  .brand {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 19px; font-weight: 700; letter-spacing: -0.3px;
+  }
+  .group { margin-top: 12px; display: flex; align-items: center; gap: 12px; }
+  .avatars { display: flex; }
+  .avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 12px; font-weight: 700; color: #0f0f12;
+    margin-left: -8px;
+    border: 2px solid var(--bg);
+    opacity: 0.28;
+    transition: opacity 0.3s, transform 0.3s;
+  }
+  .avatar:first-child { margin-left: 0; }
+  .avatar.lit { opacity: 1; }
+  .status { font-size: 13px; color: var(--muted); }
+
+  #deck {
+    flex: 1;
+    position: relative;
+    margin: 14px 20px;
+    touch-action: none;
+  }
+  .card {
+    position: absolute;
+    inset: 0;
+    background: var(--card);
+    border-radius: 26px;
+    border: 1px solid rgba(255,255,255,0.07);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 10px;
+    padding: 24px;
+    box-shadow: 0 18px 40px rgba(0,0,0,0.45);
+    transition: transform 0.35s cubic-bezier(0.22,1,0.36,1), opacity 0.35s;
+    will-change: transform;
+    cursor: grab;
+  }
+  .card.dragging { cursor: grabbing; }
+  .card-emoji { font-size: 92px; line-height: 1; }
+  .card-name { font-size: 27px; font-weight: 700; letter-spacing: -0.4px; }
+  .card-meta { font-size: 14px; color: var(--muted); }
+
+  .badge {
+    position: absolute; top: 26px;
+    font-size: 24px; font-weight: 800; letter-spacing: 2px;
+    padding: 6px 14px; border-radius: 10px;
+    opacity: 0; transition: opacity 0.08s;
+  }
+  .badge-yes { left: 22px; color: var(--yes); border: 3px solid var(--yes); transform: rotate(-12deg); }
+  .badge-no  { right: 22px; color: var(--no);  border: 3px solid var(--no);  transform: rotate(12deg); }
+
+  #actions {
+    display: flex; justify-content: center; gap: 44px;
+    padding: 14px 0 10px;
+  }
+  #actions button {
+    width: 64px; height: 64px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: #1a1a20; color: var(--text);
+    font-size: 24px; display: grid; place-items: center;
+    transition: transform 0.15s, background 0.15s;
+    cursor: pointer;
+  }
+  #actions button:active { transform: scale(0.9); }
+  #btn-no:active { background: rgba(255,59,48,0.22); }
+  #btn-yes:active { background: rgba(52,199,89,0.22); }
+
+  nav {
+    display: flex; justify-content: space-around;
+    padding: 8px 0 8px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  nav button {
+    background: none; border: 0; color: var(--muted);
+    font-size: 11px; display: flex; flex-direction: column;
+    align-items: center; gap: 3px; padding: 4px 20px;
+  }
+  nav button .ico { font-size: 19px; }
+  nav button.active { color: var(--accent); }
+
+  #result {
+    position: fixed; inset: 0;
+    background: rgba(10,10,12,0.92);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    display: grid; place-items: center;
+    padding: 24px; z-index: 200;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  #result.show { opacity: 1; pointer-events: auto; }
+  .result-card {
+    width: 100%; max-width: 340px;
+    background: var(--card);
+    border-radius: 28px; padding: 30px 24px 26px;
+    text-align: center;
+    border: 1px solid rgba(255,255,255,0.08);
+    transform: scale(0.88);
+    transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  #result.show .result-card { transform: scale(1); }
+  .result-label {
+    font-size: 12px; font-weight: 700; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--accent);
+  }
+  .result-emoji { font-size: 84px; line-height: 1; margin: 14px 0 8px; }
+  .result-name { font-size: 26px; font-weight: 700; letter-spacing: -0.4px; }
+  .result-meta { font-size: 14px; color: var(--muted); margin-top: 4px; }
+  .result-score {
+    margin-top: 18px; font-size: 15px; font-weight: 600;
+    color: var(--yes);
+  }
+  .result-avatars {
+    display: flex; justify-content: center;
+    margin-top: 16px;
+  }
+  .result-avatars .avatar { opacity: 1; border-color: var(--card); }
+  .again {
+    margin-top: 22px; width: 100%;
+    padding: 14px; border-radius: 14px; border: 0;
+    background: var(--accent); color: #fff;
+    font-size: 15px; font-weight: 600;
+    cursor: pointer;
+  }
+  .again:active { transform: scale(0.98); }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header>
+    <div class="brand"><span>🍽️</span><span>Grub</span></div>
+    <div class="group">
+      <div class="avatars" id="avatars"></div>
+      <div class="status" id="status"></div>
+    </div>
+  </header>
+
+  <main id="deck"></main>
+
+  <div id="actions">
+    <button id="btn-no" aria-label="No">✕</button>
+    <button id="btn-yes" aria-label="Yes">♥</button>
+  </div>
+
+  <nav>
+    <button class="active"><span class="ico">🔥</span>Discover</button>
+    <button><span class="ico">👥</span>Groups</button>
+    <button><span class="ico">👤</span>You</button>
+  </nav>
+</div>
+
+<div id="result">
+  <div class="result-card">
+    <div class="result-label">It's a match</div>
+    <div class="result-emoji" id="r-emoji"></div>
+    <div class="result-name" id="r-name"></div>
+    <div class="result-meta" id="r-meta"></div>
+    <div class="result-score" id="r-score"></div>
+    <div class="result-avatars" id="r-avatars"></div>
+    <button class="again" id="again">Start over</button>
+  </div>
+</div>
+
+<script>
+const MEMBERS = [
+  { name: "Maya",  initial: "M", color: "#ff6b5b" },
+  { name: "Dev",   initial: "D", color: "#4dabf7" },
+  { name: "Priya", initial: "P", color: "#b197fc" },
+  { name: "Sam",   initial: "S", color: "#ffd43b" },
+];
+const YOU = { name: "You", initial: "Y", color: "#69db7c" };
+
+// votes = the other 4 members' pre-seeded answers, in MEMBERS order
+const PLACES = [
+  { id: "ramen",  name: "Ramen Bar",    emoji: "🍜", meta: "Japanese · $$ · 0.4 mi",  votes: [1,1,1,1] },
+  { id: "taco",   name: "Taquería",     emoji: "🌮", meta: "Mexican · $ · 0.2 mi",    votes: [1,1,1,0] },
+  { id: "pizza",  name: "Pizza Corner", emoji: "🍕", meta: "Italian · $ · 0.6 mi",    votes: [1,1,0,0] },
+  { id: "sushi",  name: "Sushi Go",     emoji: "🍣", meta: "Japanese · $$$ · 1.1 mi", votes: [1,1,1,0] },
+  { id: "burger", name: "Burger Joint", emoji: "🍔", meta: "American · $ · 0.3 mi",   votes: [1,0,0,0] },
+  { id: "thai",   name: "Thai Curry",   emoji: "🍛", meta: "Thai · $$ · 0.8 mi",      votes: [1,1,0,1] },
+  { id: "pho",    name: "Pho House",    emoji: "🍲", meta: "Vietnamese · $ · 0.5 mi", votes: [1,0,1,0] },
+  { id: "salad",  name: "Green Bowl",   emoji: "🥗", meta: "Salads · $$ · 0.7 mi",    votes: [0,1,0,0] },
+];
+
+const deckEl   = document.getElementById("deck");
+const avatarsEl= document.getElementById("avatars");
+const statusEl = document.getElementById("status");
+const resultEl = document.getElementById("result");
+
+let remaining = [];
+let userVotes = {};
+let locked = false;
+
+/* ---------- header ---------- */
+
+function renderHeader(done = false) {
+  avatarsEl.innerHTML = "";
+  [YOU, ...MEMBERS].forEach((m) => {
+    const d = document.createElement("div");
+    const lit = m === YOU ? done : true;
+    d.className = "avatar" + (lit ? " lit" : "");
+    d.style.background = m.color;
+    d.textContent = m.initial;
+    avatarsEl.appendChild(d);
+  });
+  statusEl.textContent = done
+    ? "Everyone voted"
+    : `${remaining.length} spot${remaining.length === 1 ? "" : "s"} left`;
+}
+
+/* ---------- deck ---------- */
+
+function makeCard(place, depth) {
+  const el = document.createElement("div");
+  el.className = "card";
+  el.style.zIndex = String(100 - depth);
+  if (depth > 0) {
+    el.style.transform = `translateY(${depth * 11}px) scale(${1 - depth * 0.05})`;
+  }
+  el.innerHTML = `
+    <div class="badge badge-yes">YES</div>
+    <div class="badge badge-no">NOPE</div>
+    <div class="card-emoji">${place.emoji}</div>
+    <div class="card-name">${place.name}</div>
+    <div class="card-meta">${place.meta}</div>`;
+  if (depth === 0) attachDrag(el, place);
+  return el;
+}
+
+function renderDeck() {
+  deckEl.innerHTML = "";
+  remaining.slice(0, 3).forEach((p, i) => deckEl.appendChild(makeCard(p, i)));
+}
+
+function attachDrag(el, place) {
+  let startX = 0, startY = 0, dx = 0, dy = 0, dragging = false;
+  const badgeYes = el.querySelector(".badge-yes");
+  const badgeNo  = el.querySelector(".badge-no");
+
+  el.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    dragging = true;
+    startX = e.clientX; startY = e.clientY;
+    dx = 0; dy = 0;
+    el.setPointerCapture(e.pointerId);
+    el.classList.add("dragging");
+    el.style.transition = "none";
+  });
+
+  el.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    dx = e.clientX - startX;
+    dy = e.clientY - startY;
+    el.style.transform = `translate(${dx}px, ${dy}px) rotate(${dx * 0.06}deg)`;
+    const p = Math.min(Math.abs(dx) / 110, 1);
+    badgeYes.style.opacity = dx > 0 ? p : 0;
+    badgeNo.style.opacity  = dx < 0 ? p : 0;
+  });
+
+  const end = () => {
+    if (!dragging) return;
+    dragging = false;
+    el.classList.remove("dragging");
+    el.style.transition = "";
+    if (Math.abs(dx) > 90) {
+      vote(place, dx > 0 ? 1 : 0, el, dy);
+    } else {
+      el.style.transform = "";
+      badgeYes.style.opacity = 0;
+      badgeNo.style.opacity = 0;
+    }
+  };
+
+  el.addEventListener("pointerup", end);
+  el.addEventListener("pointercancel", end);
+}
+
+/* ---------- voting ---------- */
+
+function vote(place, val, el, dy = 0) {
+  if (locked) return;
+  locked = true;
+  userVotes[place.id] = val;
+
+  const dir = val ? 1 : -1;
+  el.style.transition = "transform 0.34s ease-out, opacity 0.34s ease-out";
+  el.style.transform = `translate(${dir * 620}px, ${dy}px) rotate(${dir * 28}deg)`;
+  el.style.opacity = "0";
+
+  setTimeout(() => {
+    remaining = remaining.filter((p) => p.id !== place.id);
+    renderDeck();
+    renderHeader(false);
+    locked = false;
+    if (remaining.length === 0) finish();
+  }, 320);
+}
+
+/* ---------- result ---------- */
+
+function finish() {
+  renderHeader(true);
+  setTimeout(() => {
+    const liked = PLACES.filter((p) => userVotes[p.id] === 1);
+    if (liked.length === 0) {
+      showResult(null);
+      return;
+    }
+    let best = liked[0], bestScore = -1;
+    for (const p of liked) {
+      const s = p.votes.reduce((a, b) => a + b, 0);
+      if (s > bestScore) { bestScore = s; best = p; }
+    }
+    showResult(best, bestScore);
+  }, 650);
+}
+
+function showResult(place, score) {
+  const rAv = document.getElementById("r-avatars");
+  rAv.innerHTML = "";
+  [YOU, ...MEMBERS].forEach((m) => {
+    const d = document.createElement("div");
+    d.className = "avatar lit";
+    d.style.background = m.color;
+    d.textContent = m.initial;
+    rAv.appendChild(d);
+  });
+
+  if (place) {
+    document.querySelector(".result-label").textContent = "It's a match";
+    document.getElementById("r-emoji").textContent = place.emoji;
+    document.getElementById("r-name").textContent  = place.name;
+    document.getElementById("r-meta").textContent  = place.meta;
+    document.getElementById("r-score").textContent =
+      `${score + 1} of 5 said yes`;
+  } else {
+    document.querySelector(".result-label").textContent = "No match";
+    document.getElementById("r-emoji").textContent = "🤷";
+    document.getElementById("r-name").textContent  = "Nobody agreed";
+    document.getElementById("r-meta").textContent  = "Try again with a wider net";
+    document.getElementById("r-score").textContent = "";
+  }
+  resultEl.classList.add("show");
+}
+
+/* ---------- buttons ---------- */
+
+document.getElementById("btn-yes").addEventListener("click", () => {
+  const top = deckEl.querySelector(".card");
+  if (top && remaining[0]) vote(remaining[0], 1, top);
+});
+document.getElementById("btn-no").addEventListener("click", () => {
+  const top = deckEl.querySelector(".card");
+  if (top && remaining[0]) vote(remaining[0], 0, top);
+});
+document.getElementById("again").addEventListener("click", () => {
+  resultEl.classList.remove("show");
+  start();
+});
+
+/* ---------- boot ---------- */
+
+function start() {
+  remaining = [...PLACES];
+  userVotes = {};
+  locked = false;
+  renderDeck();
+  renderHeader(false);
+}
+
+start();
+</script>
+</body>
+</html>
